@@ -1,0 +1,34 @@
+<script language='Javascript'>
+<!--
+  // Function to open new window containing window_src, 100x400
+  function openWindow(window_src)
+  {
+    window.open(window_src, 'newwindow', config='height=700, width=1150, '
+        + 'toolbar=no, menubar=no, scrollbars=yes, resizable=yes, location=no, '
+        + 'directories=no, status=no');
+  }
+-->
+</script>
+
+
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN"
+       "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+<title>Select moon</title>
+</head>
+<body>
+
+<h1>Choose the MagPy-station</h1>
+
+<form action="input_button.htm">
+  <p>
+    <input type="button" name="Sedna" value="Open Sedna"
+      onclick="openWindow('sedna.html');">
+    <input type="button" name="Europa" value="Open Europa"
+      onclick="openWindow('europa.html');">
+  </p>
+</form>
+
+</body>
+</html>
