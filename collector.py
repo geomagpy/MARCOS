@@ -43,21 +43,30 @@ from __future__ import absolute_import
 
 ## Import MagPy
 ## -----------------------------------------------------------
+
 local = True
 if local:
     import sys
     sys.path.insert(1,'/home/leon/Software/magpy-git/')
 
-from magpy.stream import *
-from magpy.database import *
-from magpy.opt import cred as mpcred
+from magpy.stream import DataStream, KEYLIST, NUMKEYLIST
+from magpy.database import mysql,writeDB
+
+## Import Twisted logging functionality
 from twisted.python import log
+
+from magpy.opt import cred as mpcred
 import threading
+import struct
+from datetime import datetime 
+from matplotlib.dates import date2num, num2date
+import numpy as np
+
 # For file export
 import StringIO
-from magpy.acquisition.acquisitionsupport import dataToFile
-#from magpy.collector import collectormethods as cm
+from magpy.acquisition import acquisitionsupport as acs
 
+#from magpy.collector import collectormethods as cm
 
 ## Import MQTT
 ## -----------------------------------------------------------
@@ -278,7 +287,7 @@ def on_message(client, userdata, msg):
                                 log.msg("      -> please use option l (e.g. -l '/my/path') to define") 
                         if verifiedlocation:
                             filename = "{}-{:02d}-{:02d}".format(datearray[0],datearray[1],datearray[2])
-                            dataToFile(location, sensorid, filename, data_bin, header)
+                            acs.dataToFile(location, sensorid, filename, data_bin, header)
             if 'stdout' in destination:
                 if not arrayinterpreted:
                     stream.ndarray = interprete_data(msg.payload, identifier, stream, sensorid)
@@ -355,57 +364,92 @@ def main(argv):
     global dictcheck
     dictcheck = False
 
-    usagestring = 'collector.py -b <broker> -p <port> -t <timeout> -o <topic> -d <destination> -l <location> -c <credentials> -r <dbcred> -q <qos> -u <user> -P <password> -s <source> -f <offset> -g <logging>'
+    usagestring = 'collector.py -b <broker> -p <port> -t <timeout> -o <topic> -d <destination> -l <location> -c <credentials> -r <dbcred> -q <qos> -u <user> -P <password> -s <source> -f <offset> -m <marcos>'
     try:
-        opts, args = getopt.getopt(argv,"hb:p:t:o:d:l:c:r:q:u:P:s:f:g:U",["broker=","port=","timeout=","topic=","destination=","location=","credentials=","dbcred=","qos=","debug=","user=","password=","source=","offset=","logging="])
+        opts, args = getopt.getopt(argv,"hb:p:t:o:d:l:c:r:q:u:P:s:f:m:U",["broker=","port=","timeout=","topic=","destination=","location=","credentials=","dbcred=","qos=","debug=","user=","password=","source=","offset=","marcos="])
     except getopt.GetoptError:
-        log.msg('Check your options:')
-        log.msg(usagestring)
+        print ('Check your options:')
+        print (usagestring)
         sys.exit(2)
     for opt, arg in opts:
         if opt == '-h':
-            log.msg('------------------------------------------------------')
-            log.msg('Usage:')
-            log.msg(usagestring)
-            log.msg('------------------------------------------------------')
-            log.msg('Options:')
-            log.msg('-h                             help')
-            log.msg('-b                             set broker address: default = localhost')
-            log.msg('-p                             set port - default is 1883')
-            log.msg('-t                             set timeout - default is 60')
-            log.msg('-o                             set base topic - for MARTAS this corresponds')
-            log.msg('                               to the station ID (e.g. wic)')
-            log.msg('-d                             set destination - std.out, db, file') 
-            log.msg('                               default is std.out') 
-            log.msg('-l                             set location depending on destination')
-            log.msg('                               if d="file": provide path')
-            log.msg('                               if d="db": provide db credentials')
-            log.msg('                               if d="std.out": not used')
-            log.msg('-c                             set mqtt communication credential keyword')
-            log.msg('-q                             set mqtt quality of service (default = 0)')            
-            log.msg('-r                             set db credential keyword')            
-            log.msg('-s                             source protocol of data: default is mqtt')            
-            log.msg('                               other options:')
-            log.msg('                               -s wamp    not yet implemented.')
-            log.msg('-f                             offset values. Can either be "db" for')
-            log.msg('                               applying delta values from db or a string')
-            log.msg('                               of the following format (key:value):')
-            log.msg('                               -f "t1:3.234,x:45674.2"')
-            log.msg('                               other options:')
-            log.msg('-g                             define logging destination: default is sys.stdout. ')
-            log.msg('                               e.g. "/var/log/magpy/marcos.log"')
-            log.msg('------------------------------------------------------')
-            log.msg('Examples:')
-            log.msg('1. Basic')
-            log.msg('   python collector.py -b "192.168.0.100" -o wic')
-            log.msg('2. Writing to file in directory "/my/path/"')
-            log.msg('   python collector.py -b "192.168.0.100" -d file -l "/my/path" -o wic')
-            log.msg('3. Writing to file and stdout')
-            log.msg('   python collector.py -b "192.168.0.100" -d file,stdout -l "/tmp" -o wic')
-            log.msg('4. Writing to db')
-            log.msg('   python collector.py -b "192.168.0.100" -d db -r mydb -o wic')
-            log.msg('   python collector.py -d "db,file" -r testdb')
+            print ('------------------------------------------------------')
+            print ('Usage:')
+            print (usagestring)
+            print ('------------------------------------------------------')
+            print ('Options:')
+            print ('-h                             help')
+            print ('-b                             set broker address: default = localhost')
+            print ('-p                             set port - default is 1883')
+            print ('-t                             set timeout - default is 60')
+            print ('-o                             set base topic - for MARTAS this corresponds')
+            print ('                               to the station ID (e.g. wic)')
+            print ('-d                             set destination - std.out, db, file') 
+            print ('                               default is std.out') 
+            print ('-l                             set location depending on destination')
+            print ('                               if d="file": provide path')
+            print ('                               if d="std.out": not used')
+            print ('-c                             set mqtt communication credential keyword')
+            print ('-q                             set mqtt quality of service (default = 0)')            
+            print ('-r                             set db credential keyword')            
+            print ('-s                             source protocol of data: default is mqtt')            
+            print ('                               other options:')
+            print ('                               -s wamp    not yet implemented.')
+            print ('-f                             offset values. Can either be "db" for')
+            print ('                               applying delta values from db or a string')
+            print ('                               of the following format (key:value):')
+            print ('                               -f "t1:3.234,x:45674.2"')
+            print ('                               other options:')
+            print ('-m                             marcos configuration file ')
+            print ('                               e.g. "/home/cobs/marcos.cfg"')
+            print ('------------------------------------------------------')
+            print ('Examples:')
+            print ('1. Basic')
+            print ('   python collector.py -b "192.168.0.100" -o wic')
+            print ('2. Writing to file in directory "/my/path/"')
+            print ('   python collector.py -b "192.168.0.100" -d file -l "/my/path" -o wic')
+            print ('3. Writing to file and stdout')
+            print ('   python collector.py -b "192.168.0.100" -d file,stdout -l "/tmp" -o wic')
+            print ('4. Writing to db')
+            print ('   python collector.py -b "192.168.0.100" -d db -r mydb -o wic')
+            print ('   python collector.py -d "db,file" -r testdb')
+            print ('5. Using configuration file')
+            print ('   python collector.py -m "/path/to/marcos.cfg"')
+            print ('6. Overriding individual parameters from config file')
+            print ('   python collector.py -m "/path/to/marcos.cfg" -b "192.168.0.100"')
+            print ('   (make sure that config is called first)')
             sys.exit()
+        elif opt in ("-m", "--marcos"):
+            marcosfile = arg
+            print ("Getting all parameters from configration file: {}".format(marcosfile))
+            conf = acs.GetConf(marcosfile)
+            if not conf.get('logging','') == '':
+                logging = conf.get('logging').strip()
+            if not conf.get('broker','') == '':
+                broker = conf.get('broker').strip()
+            if not conf.get('mqttport','') in ['','-']:
+                port = int(conf.get('mqttport').strip())
+            if not conf.get('mqttdelay','') in ['','-']:
+                timeout = int(conf.get('mqttdelay').strip())
+            if not conf.get('mqttuser','') in ['','-']:
+                user = conf.get('mqttuser').strip()
+            if not conf.get('mqttqos','') in ['','-']:
+                qos = conf.get('mqttqos').strip()
+            if not conf.get('mqttcredentials','') in ['','-']:
+                credentials=conf.get('mqttcredentials').strip()
+            if not conf.get('station','') in ['','-']:
+                stationid = conf.get('station').strip()
+            if not conf.get('destination','') in ['','-']:
+                destination=conf.get('destination').strip()
+            if not conf.get('filepath','') in ['','-']:
+                location=conf.get('filepath').strip()
+            if not conf.get('databasecredentials','') in ['','-']:
+                dbcred=conf.get('databasecredentials').strip()
+            if not conf.get('offset','') in ['','-']:
+                offset = conf.get('offset').strip()
+            if not conf.get('debug','') in ['','-']:
+                debug = conf.get('debug').strip()
+            source='mqtt'
         elif opt in ("-b", "--broker"):
             broker = arg
         elif opt in ("-p", "--port"):
@@ -441,10 +485,13 @@ def main(argv):
             password = arg
         elif opt in ("-f", "--offset"):
             offset = arg
-        elif opt in ("-g", "--logging"):
-            logging = arg
         elif opt in ("-U", "--debug"):
             debug = True
+
+
+    if debug:
+        print ("collector strting with the following parameters:")
+        print ("Logs: {}; Broker: {}; Topic/StationID: {}; MQTTport: {}; MQTTuser: {}; MQTTcredentials: {}; Data destination: {}; Filepath: {}; DB credentials: {}; Offsets: {}".format(logging, broker, stationid, port, user, credentials, destination, location, dbcred, offset))
 
     try:
         ##  Start Twisted logging system
@@ -453,7 +500,7 @@ def main(argv):
             log.startLogging(sys.stdout)
         else:
             try:
-                log.msg(" -- Logging to {}".format(logging))
+                print (" -- Logging to {}".format(logging))
                 log.startLogging(open(logging,'a'))
                 log.msg("----------------")
                 log.msg("  -> Logging to {}".format(logging))
@@ -502,6 +549,12 @@ def main(argv):
     if source == 'mqtt':
         client = mqtt.Client()
         # Authentication part
+        if not credentials in ['','-']:
+            # use user and pwd from credential data if not yet set 
+            if user in ['',None,'None','-']: 
+                user = mpcred.lc(credentials,'user')
+            if password  in ['','-']:
+                password = mpcred.lc(credentials,'passwd')
         if not user in ['',None,'None','-']: 
             #client.tls_set(tlspath)  # check http://www.steves-internet-guide.com/mosquitto-tls/
             client.username_pw_set(user, password=password)  # defined on broker by mosquitto_passwd -c passwordfile user
