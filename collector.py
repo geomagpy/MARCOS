@@ -51,11 +51,14 @@ if local:
 
 from magpy.stream import DataStream, KEYLIST, NUMKEYLIST
 from magpy.database import mysql,writeDB
-
-## Import Twisted logging functionality
-from twisted.python import log
-
 from magpy.opt import cred as mpcred
+
+## Import Twisted for websocket and logging functionality
+from twisted.python import log
+from twisted.web.server import Site
+from twisted.web.static import File
+from twisted.internet import reactor
+
 import threading
 import struct
 from datetime import datetime 
@@ -86,10 +89,45 @@ destination = 'stdout'
 location = '/tmp'
 credentials = 'cred'
 stationid = 'WIC'
+webpath = './web'
+webport = 8080
 
-def append_file(path, array):
-    # use data2file method
+## Import WebsocketServer
+## -----------------------------------------------------------
+def wsThread():
+    wsserver.set_fn_new_client(new_wsclient)
+    wsserver.set_fn_message_received(message_received)
+    wsserver.run_forever()
+
+# TODO: find a way how to use these two functions:
+def new_wsclient(ws_client,server):
     pass
+    # for debug: see which threads are running:
+    #print(str(threading.enumerate()))
+def message_received(ws_client,server,message):
+    pass
+
+ws_available = True
+try:
+    # available since 0.3.99
+    from magpy.collector.websocket_server import WebsocketServer
+except:
+    ws_available = False
+
+if ws_available:
+    import json
+    # 0.0.0.0 makes the websocket accessable from anywhere TODO: not only 5000
+    wsserver = WebsocketServer(5000, host='0.0.0.0')
+
+def webThread(webpath,webport):
+    # TODO absolut path or other solution?
+    resource = File(webpath)
+    factory = Site(resource)
+    #endpoint = endpoints.TCP4ServerEndpoint(reactor, 8888)
+    #endpoint.listen(factory)
+    reactor.listenTCP(webport,factory)
+    log.msg("collector: We don't need signals here - Webserver started as daemon")
+    reactor.run()
 
 
 def analyse_meta(header,sensorid):
@@ -288,6 +326,16 @@ def on_message(client, userdata, msg):
                         if verifiedlocation:
                             filename = "{}-{:02d}-{:02d}".format(datearray[0],datearray[1],datearray[2])
                             acs.dataToFile(location, sensorid, filename, data_bin, header)
+            if 'websocket' in destination:
+                if not arrayinterpreted:
+                    stream.ndarray = interprete_data(msg.payload, identifier, stream, sensorid)
+                    #streamdict[sensorid] = stream.ndarray  # to store data from different sensors
+                    arrayinterpreted = True
+                for idx,el in enumerate(stream.ndarray[0]):
+                    time = num2date(el).replace(tzinfo=None)
+                    msecSince1970 = int((time - datetime(1970,1,1)).total_seconds()*1000)
+                    datastring = ','.join([str(val[idx]) for i,val in enumerate(stream.ndarray) if len(val) > 0 and not i == 0])
+                    wsserver.send_message_to_all("{}: {},{}".format(sensorid,msecSince1970,datastring))
             if 'stdout' in destination:
                 if not arrayinterpreted:
                     stream.ndarray = interprete_data(msg.payload, identifier, stream, sensorid)
@@ -327,6 +375,19 @@ def on_message(client, userdata, msg):
                 pass
         else:
             log.msg("{}  {}".format(msg.topic, str(msg.payload)))
+    if msg.topic.endswith('meta') and 'websocket' in destination:
+        # send header info for each element (# sensorid   nr   key   elem   unit) 
+        analyse_meta(str(msg.payload),sensorid)
+        for (i,void) in enumerate(identifier[sensorid+':keylist']):
+            jsonstr={}
+            jsonstr['sensorid'] = sensorid
+            jsonstr['nr'] = i
+            jsonstr['key'] = identifier[sensorid+':keylist'][i]
+            jsonstr['elem'] = identifier[sensorid+':elemlist'][i]
+            jsonstr['unit'] = identifier[sensorid+':unitlist'][i]
+            payload = json.dumps(jsonstr)
+            wsserver.send_message_to_all('# '+payload)
+
 
 def main(argv):
     #broker = '192.168.178.75'
@@ -523,6 +584,20 @@ def main(argv):
         if location in [None,''] and not os.path.exists(location):
             log.msg('destination "file" requires a valid path provided as location')
             log.msg(' ... aborting ...')
+            sys.exit()
+    if 'websocket' in destination:
+        if ws_available:
+            wsThr = threading.Thread(target=wsThread)
+            # start as daemon, so the entire Python program exits when only daemon threads are left
+            wsThr.daemon = True
+            log.msg('starting websocket on port 5000...')
+            wsThr.start()
+            # start webserver
+            webThr = threading.Thread(target=webThread, args=(webpath,webport))
+            webThr.daemon = True
+            webThr.start()
+        else:
+            print("no webserver or no websocket-server available: remove 'websocket' from destination")
             sys.exit()
     if 'db' in destination:
         if dbcred in [None,'']:

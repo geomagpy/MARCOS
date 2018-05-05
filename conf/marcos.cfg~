@@ -41,8 +41,8 @@ databasecredentials : mydb
 # --- if multiple sensors are collected: for which sensors do offsets apply
 # --- wouldn't it be better to apply offsets already at acquisition and send
 #     info with DataDeltaValues ?
-#     Some general rule: if DataDeltaValues are provided then these values have been applied!!! 
-#     Add a new column with DataDeltaValuesApplied (True/False)
+#     Some general rule: DataDeltaValues have to be provided. If they have been applied 
+#     add a new column with DataDeltaValuesApplied (True/False)
 # ++
 #offset : 
 
@@ -65,6 +65,16 @@ mqttqos : 0
 # ++
 #logging : sys.stdout
 logging : /var/log/magpy/marcos.log
+
+# Web socket display
+# ----------------------
+# Provide websocket definition if you want to use
+# web interface and display.
+# ++
+webport : 8080
+webpath : ./web
+socketport : 5000
+
 
 # Debug mode
 # ----------------------
