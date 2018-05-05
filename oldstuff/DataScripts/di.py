@@ -45,19 +45,13 @@ Get files from a remote server (to be reached by nfs, samba, ftp, html or local 
 File content is directly added to a data bank (or local file if preferred).
 """
 from __future__ import print_function
-try:
-    from magpy.stream import *
-    from magpy.absolutes import *
-    import magpy.mpplot as mp
-    from magpy.database import *
-    from magpy.opt import cred as mpcred
-except:
-    import sys
-    sys.path.append('/home/leon/Software/magpy/trunk/src')
-    from stream import *
-    from absolutes import *
-    from database import *
-    from opt import cred as mpcred
+
+from magpy.stream import *
+from magpy.absolutes import *
+import magpy.mpplot as mp
+from magpy.database import *
+from magpy.opt import cred as mpcred
+
 import getopt
 import fnmatch
 import pwd, grp  # for changing ownership of web files
@@ -87,6 +81,7 @@ def main(argv):
     end = datetime.strftime(datetime.utcnow(),"%Y-%m-%d") # e
     expD = 3				# d
     expI = 64				# i
+    compensation=True                   # m
     dbadd = False			# n
     addBLVdb = False			# n
     flagging=False			# g
@@ -104,9 +99,9 @@ def main(argv):
     scalarpath = ''			# 
 
     try:
-        opts, args = getopt.getopt(argv,"hc:a:v:j:s:k:o:l:b:e:t:z:d:i:p:y:w:m:ngrx:u:",["cred=","dipath=","variolist=","variodataidlist=","scalarlist=","scalardataidlist=","variopath=","scalarpath=","begin=","end=","stationid=","pierlist=","abstypelist=","azimuthlist=","expD=","expI=","write=","add2DB=","flag=","createarchive=","webdir=",])
+        opts, args = getopt.getopt(argv,"hc:a:v:j:s:k:o:ml:b:e:t:z:d:i:p:y:w:m:ngrx:u:",["cred=","dipath=","variolist=","variodataidlist=","scalarlist=","scalardataidlist=","variopath=","compensation=","scalarpath=","begin=","end=","stationid=","pierlist=","abstypelist=","azimuthlist=","expD=","expI=","write=","add2DB=","flag=","createarchive=","webdir=",])
     except getopt.GetoptError:
-        print('di.py -c <creddb> -a <dipath> -v <variolist>  -j <variodataidlist> -s <scalarlist> -o <variopath> -l <scalarpath> -b <startdate>  -e <enddate> -t <stationid>  -p <pierlist> -f <deltaflist> -z <azimuthlist> -y <abstypelist> -d <expectedD> -i <expectedI> -w <writepath> -n <add2DB>  -g  <flag> -r <createarchive> -x <webdir> -u <user>')
+        print('di.py -c <creddb> -a <dipath> -v <variolist>  -j <variodataidlist> -s <scalarlist> -o <variopath> -m <compensation> -l <scalarpath> -b <startdate>  -e <enddate> -t <stationid>  -p <pierlist> -f <deltaflist> -z <azimuthlist> -y <abstypelist> -d <expectedD> -i <expectedI> -w <writepath> -n <add2DB>  -g  <flag> -r <createarchive> -x <webdir> -u <user>')
         sys.exit(2)
     for opt, arg in opts:
         if opt == '-h':
@@ -142,6 +137,8 @@ def main(argv):
             print('-v            : variolist - comma separated list of variometer ids')
             print('-j            : variodataidlist - specify the dataids to be used fro each vario')
             print('                Default: 0002 for each variometer sensor')
+            print('-o            : path to variometer data')
+            print('-m (no input) : apply compensation field values to variometer data')
             print('-s            : scalarpath - path to scalar data')
             print('-k            : scalardataidlist - specify the dataids to be used fro each scalar')
             print('                Default: 0002 for each scalar sensor')
@@ -202,6 +199,8 @@ def main(argv):
             scalardataidlist = arg.split(',')
         elif opt in ("-o", "--variopath"):
             fallbackvariopath = arg
+        elif opt in ("-m", "--compensation"):
+            compensation=True
         elif opt in ("-l", "--scalarpath"):
             fallbackscalarpath = arg
         elif opt in ("-b", "--begin"):
@@ -520,10 +519,10 @@ def main(argv):
 
                 if createarchive and variolist.index(vario) == len(variolist)-1  and scalarlist.index(scalar) == len(scalarlist)-1:
                     print("adding to archive")
-                    absstream = absoluteAnalysis(abspath,variopath,scalarpath,expD=expD,expI=expI, diid=diid,stationid=stationid,abstype=abstype,azimuth=azimuth,pier=pier, alpha=alpha,deltaF=deltaF, starttime=begin,endtime=end, db=db,dbadd=dbadd,movetoarchive=os.path.join(archive,stationid,'DI','raw'))
+                    absstream = absoluteAnalysis(abspath,variopath,scalarpath,expD=expD,expI=expI, diid=diid,stationid=stationid,abstype=abstype,azimuth=azimuth,pier=pier, alpha=alpha,deltaF=deltaF, starttime=begin,endtime=end, db=db,dbadd=dbadd,compensation=compensation,movetoarchive=os.path.join(archive,stationid,'DI','raw'))
                 else:
                     print("just analyzing")
-                    absstream = absoluteAnalysis(abspath,variopath,scalarpath,expD=expD,expI=expI, diid=diid,stationid=stationid,abstype=abstype,azimuth=azimuth,pier=pier, alpha=alpha,deltaF=deltaF, starttime=begin,endtime=end, db=db,dbadd=dbadd)
+                    absstream = absoluteAnalysis(abspath,variopath,scalarpath,expD=expD,expI=expI, diid=diid,stationid=stationid,abstype=abstype,azimuth=azimuth,pier=pier, alpha=alpha,deltaF=deltaF, starttime=begin,endtime=end, db=db,dbadd=dbadd,compensation=compensation)
 
 		# -----------------------------------------------------
     		# d) write data to a file and sort it, write it again 
