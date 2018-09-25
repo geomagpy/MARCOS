@@ -1,11 +1,20 @@
 #!/usr/bin/env python
 """
 Setting up a clean new database from raw data 
-"""
 
-from magpy.stream import *
-from magpy.database import *
-from magpy.opt import cred as mpcred
+
+TODO: either modify cleanup or write a small job to extract critical errors to a separate log file for NAGIOS
+"""
+try:
+    from magpy.stream import *
+    from magpy.database import *
+    from magpy.opt import cred as mpcred
+except:
+    import sys
+    sys.path.append('/home/leon/Software/magpy/trunk/src')
+    from stream import *
+    from database import *
+    from opt import cred as mpcred
 import getopt
 import pwd
 
@@ -113,12 +122,12 @@ def main(argv):
         print '-- check data2DB.py -h for more options and requirements'
         sys.exit()
 
-    print ("Accessing data bank ...")
+    print "Accessing data bank ..."
     try:
-        db = mysql.connect(host=mpcred.lc(cred,'host'),user=mpcred.lc(cred,'user'),passwd=mpcred.lc(cred,'passwd'),db =mpcred.lc(cred,'db'))
-        print ("success")
+        db = mysql.connect (host=mpcred.lc(cred,'host'),user=mpcred.lc(cred,'user'),passwd=mpcred.lc(cred,'passwd'),db =mpcred.lc(cred,'db'))
+        print "success"
     except:
-        print ("failure - check your credentials / databank")
+        print "failure - check your credentials / databank"
         sys.exit()
 
     # Getting dates
@@ -142,6 +151,8 @@ def main(argv):
 
     # skip BLV measurements from cleanup 
     sql = sql + ' AND SensorID NOT LIKE "BLV_%"'
+    # skip Quakes from cleanup 
+    sql = sql + ' AND SensorID NOT LIKE "QUAKES"'
 
     if len(skip) > 0:
         skipstr = ''
@@ -161,22 +172,36 @@ def main(argv):
     print "Cleaning database contens of:", datainfoidlist
 
     for data in datainfoidlist:
-        print "Loading data files"
-        print data
-        if not startdate == '':
-            stream = readDB(db,data,min(datelist),max(datelist))
-        else:
-            stream = readDB(db,data,min(datelist),None)
+        print " ---------------------------- "
+        print " ---------------------------- "
+        print "Loading data files of", data
+        print " ---------------------------- "
+        print " ---------------------------- "
+        print datetime.utcnow()
+        try:
+            if not startdate == '':
+                stream = readDB(db,data,min(datelist),max(datelist))
+            else:
+                stream = readDB(db,data,min(datelist),None)
+        except:
+            stream = DataStream()
+            print (" Error: Could not read database contents of {}".format(data))
         keys = stream._get_key_headers()
         lenstream = stream.length()[0]
  
         if lenstream > 1:
-            print "Found data points:", lenstream
-            print "Starting from :", num2date(min(stream.ndarray[0]))
-            print "Ending at :", num2date(max(stream.ndarray[0]))
+            print "  Found data points:", lenstream
+            print datetime.utcnow()
+            print "  Starting from :", num2date(min(stream.ndarray[0]))
+            if not num2date(max(stream.ndarray[0])).replace(tzinfo=None) < datetime.utcnow().replace(tzinfo=None):
+                print ("  Found in-appropriate date in stream!! maxdate = {}".format(num2date(max(stream.ndarray[0]))))
+                print ("  Length stream before:", len(stream.ndarray[0]))
+                stream = stream.extract('time',date2num(datetime.utcnow()),'<')
+                print ("  Length stream after:", len(stream.ndarray[0]))
+            print "  Ending at :", num2date(max(stream.ndarray[0]))
 
             sr = stream.samplingrate()
-            print "Sampling rate:", sr
+            print "  Sampling rate:", sr
 
             if not path == '':
                 try:
@@ -193,21 +218,33 @@ def main(argv):
                 print "Now deleting old entries in database older than %s days" % str(int(sr*samplingrateratio))
                 dbdelete(db,stream.header['DataID'],samplingrateratio=samplingrateratio)
 
-            if flagging and db:
-                flaglist = db2flaglist(db,sensorid=stream.header['SensorID'])
-                if len(flaglist) > 0:
-                    for i in range(len(flaglist)):
-                        stream = stream.flag_stream(flaglist[i][2],flaglist[i][3],flaglist[i][4],flaglist[i][0],flaglist[i][1])
+            print ("Please note: flags are not contained in the cdf archive. They are stored separately in the database (and yearly files -> too be done")
+            #if flagging and db and sr > 0.9:
+            #    print "Applying flags (only 1 Hz data and below)", datetime.utcnow()
+            #    flaglist = db2flaglist(db,sensorid=stream.header['SensorID'])
+            #    if len(flaglist) > 0:
+            #        for i in range(len(flaglist)):
+            #            stream = stream.flag_stream(flaglist[i][2],flaglist[i][3],flaglist[i][4],flaglist[i][0],flaglist[i][1])
 
+            #    print "Flagging finished", datetime.utcnow()
             #print sensorid, len(stream)
 
-            if sr < 0.9 and autofilter in [1,2,3]:
+            if sr < 0.8 and autofilter in [1,2,3]: #changed from 0.9 to 0.8 may 2018
                 print "Filtering to 1Hz"
                 try:
                     if flagging:
                         stream = stream.remove_flagged()
                     print "Filtering keys", keys
-                    stream = stream.filter(filter_width=timedelta(seconds=1))
+                    stream = stream.filter(missingdata='conservative')
+                    if flagging:
+                        print ("Please note: flags are not contained in the cdf archive. They are stored separately in the database (and yearly files -> too be done")
+                        #print "Applying flags (only 1 Hz data and below)", datetime.utcnow()
+                        #flaglist = db2flaglist(db,sensorid=stream.header['SensorID'])
+                        #if len(flaglist) > 0:
+                        #    for i in range(len(flaglist)):
+                        #        stream = stream.flag_stream(flaglist[i][2],flaglist[i][3],flaglist[i][4],flaglist[i][0],flaglist[i][1])
+                        #print "Flagging finished", datetime.utcnow()
+
                     print "Writing to DB"
                     writeDB(db,stream)
                 except:
@@ -222,17 +259,18 @@ def main(argv):
                     print "A problem occurred while saving archive file of 1 second data"
                 try:
                     dbdelete(db,datainfoid,samplingrateratio=samplingrateratio)
-                    print "Finished seconds filtering for %s: %s data points " % (datainfoid, len(stream))
+                    print "Finished seconds filtering for %s: %s data points " % (datainfoid, stream.length()[0])
+                    print datetime.utcnow()
                 except:
                     print "A problem occurred while saving archive file of 1 second data"
             if sr < 59.0 and autofilter in [2,3]:
                 print "Filtering to minutes"
                 try:
                     if flagging:
-                        for i in range(len(flaglist)):
-                            stream = stream.flag_stream(flaglist[i][2],flaglist[i][3],flaglist[i][4],flaglist[i][0],flaglist[i][1])
+                        #for i in range(len(flaglist)):
+                        #    stream = stream.flag_stream(flaglist[i][2],flaglist[i][3],flaglist[i][4],flaglist[i][0],flaglist[i][1])
                         stream = stream.remove_flagged()
-                    stream = stream.filter(filter_width=timedelta(minutes=1))
+                    stream = stream.filter()
                     writeDB(db,stream)
                 except:
                     print "A problem occurred while filtering to 1 minute data"
@@ -246,7 +284,7 @@ def main(argv):
                     print "A problem occurred while saving archive file of 1 minute data"
                 try:
                     dbdelete(db,datainfoid,samplingrateratio=samplingrateratio)
-                    print "Finished minutes filtering for %s: %s data points " % (datainfoid, len(stream))
+                    print "Finished minutes filtering for %s: %s data points " % (datainfoid, stream.length()[0])
                 except:
                     print "A problem occurred while removing old inputs from database"
             if sr < 3500.0 and autofilter in [3]:
@@ -254,9 +292,9 @@ def main(argv):
                 #try:
                 print len(stream)
                 if flagging:
-                    print "Flagging now" 
-                    for i in range(len(flaglist)):
-                        stream = stream.flag_stream(flaglist[i][2],flaglist[i][3],flaglist[i][4],flaglist[i][0],flaglist[i][1])
+                    #print "Flagging now" 
+                    #for i in range(len(flaglist)):
+                    #    stream = stream.flag_stream(flaglist[i][2],flaglist[i][3],flaglist[i][4],flaglist[i][0],flaglist[i][1])
                     stream = stream.remove_flagged()
                 stream = stream.filter(filter_width=timedelta(hours=1),filter_type='flat', resampleoffset=timedelta(minutes=30))
                 writeDB(db,stream)
@@ -272,7 +310,7 @@ def main(argv):
                     print "A problem occurred while saving archive file of 1 hour data"
                 try:
                     dbdelete(db,datainfoid,samplingrateratio=samplingrateratio)
-                    print "Finished hours filtering for %s: %s data points " % (datainfoid, len(stream))
+                    print "Finished hours filtering for %s: %s data points " % (datainfoid, stream.length()[0])
                 except:
                     print "A problem occurred while removing old inputs from database"
 

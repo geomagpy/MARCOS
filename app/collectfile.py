@@ -100,7 +100,7 @@ def main(argv):
             print('-u            : perform upload as this user - necessary for cron and other root jobs')
             print('                as root cannot use scp transfer.')     
             print('-x            : use uppercase for dateformat (e.g. NOV2014 instead of Nov2014)')
-            print('-m            : force data to the given table name.') 
+            print('-m            : force data to the given revision number.') 
             print('-z            : if option l is selected raw data will be zipped within localpath.') 
             print('-------------------------------------')
             print('Examples:')
@@ -303,10 +303,10 @@ def main(argv):
                     data = read(filepath,disableproxy=disableproxy)
 
                     try:
-                        test = data.header['StationID']
+                        test = data.header.get('StationID')
                         if not stationid == '':
                             data.header['StationID'] = stationid
-                            print("StationID changed to:", data.header['StationID'])
+                            print("StationID changed to:", data.header.get('StationID'))
                     except:
                         if not stationid == '':
                             data.header['StationID'] = stationid
@@ -314,12 +314,12 @@ def main(argv):
                             print("Could not find station ID in datafile")
                             print("Please provide by using -t stationid")
                             sys.exit()
-                    print("Using StationID", data.header['StationID'])
+                    print("Using StationID", data.header.get('StationID'))
                     try:
-                        test = data.header['SensorID']
+                        test = data.header.get('SensorID')
                         if not sensorid == '':
                             data.header['SensorID'] = sensorid
-                            print("SensorID changed to:", data.header['SensorID'])
+                            print("SensorID changed to:", data.header.get('SensorID'))
                     except:
                         if not sensorid == '':
                             data.header['SensorID'] = sensorid
@@ -329,7 +329,7 @@ def main(argv):
                             sys.exit()
                     
                     if not localpath == '':
-                        sensid = data.header['SensorID']
+                        sensid = data.header.get('SensorID')
                         # One Wire treatment for correct path: 
                         if sensid.endswith('0000') and not '_' in sensid:
                             sensid = sensid+'_0001'
@@ -380,7 +380,7 @@ def main(argv):
 
                     if flagging and db:
                         print("Apply flagging information")
-                        flaglist = db2flaglist(db,sensorid=data.header['SensorID'])
+                        flaglist = db2flaglist(db,sensorid=data.header.get('SensorID'))
                         if len(flaglist) > 0:
                             for i in range(len(flaglist)):
                                 data = data.flag_stream(flaglist[i][2],flaglist[i][3],flaglist[i][4],flaglist[i][0],flaglist[i][1])
@@ -390,7 +390,7 @@ def main(argv):
                         if not len(data.ndarray[0]) > 0:
                             data = data.linestruct2ndarray()
                         if not force == '':
-                            tabname = data.header['SensorID']+'_'+force
+                            tabname = data.header.get('SensorID')+'_'+force
                             print (" - Force option chosen: forcing data to table {}".format(tabname)) 
                             writeDB(db,data, tablename=tabname)
                         else:

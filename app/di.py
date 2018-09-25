@@ -1,6 +1,18 @@
 #!/usr/bin/env python
 """
 
+DI.PY 
+Applictaion to analysze di data from different sources
+######################################################
+
+di.py can analyze data from various sources by considering data from 
+several different variometers and scalar systems. It further supports 
+data from multiple piers with different characteristics. Please note:
+directional pier differences (dD and dI) are not considered.
+ 
+
+Check the following:
+
 Add di.py to MARCOS:
 
 To be done:
@@ -74,6 +86,7 @@ def main(argv):
     abstypelist = ''			# y
     azimuthlist = ''			# z
     archive = ''			# w   (e.g. /srv/archive)
+    identifier = 'BLV'                 # f
     stationid = 'wic'			# t
     fallbackvariopath = ''		# o
     fallbackscalarpath = ''		# l
@@ -100,9 +113,9 @@ def main(argv):
     scalarpath = ''			# 
 
     try:
-        opts, args = getopt.getopt(argv,"hc:a:v:j:s:k:o:mql:b:e:t:z:d:i:p:y:w:ngrx:u:",["cred=","dipath=","variolist=","variodataidlist=","scalarlist=","scalardataidlist=","variopath=","compensation=","rotation=","scalarpath=","begin=","end=","stationid=","pierlist=","abstypelist=","azimuthlist=","expD=","expI=","write=","add2DB=","flag=","createarchive=","webdir=",])
+        opts, args = getopt.getopt(argv,"hc:a:v:j:s:k:o:mql:b:e:t:z:d:i:p:y:w:f:ngrx:u:",["cred=","dipath=","variolist=","variodataidlist=","scalarlist=","scalardataidlist=","variopath=","compensation=","rotation=","scalarpath=","begin=","end=","stationid=","pierlist=","abstypelist=","azimuthlist=","expD=","expI=","write=","identifier=","add2DB=","flag=","createarchive=","webdir=",])
     except getopt.GetoptError:
-        print('di.py -c <creddb> -a <dipath> -v <variolist>  -j <variodataidlist> -s <scalarlist> -o <variopath> -m <compensation> -q <rotation> -l <scalarpath> -b <startdate>  -e <enddate> -t <stationid>  -p <pierlist> -f <deltaflist> -z <azimuthlist> -y <abstypelist> -d <expectedD> -i <expectedI> -w <writepath> -n <add2DB>  -g  <flag> -r <createarchive> -x <webdir> -u <user>')
+        print('di.py -c <creddb> -a <dipath> -v <variolist>  -j <variodataidlist> -s <scalarlist> -o <variopath> -m <compensation> -q <rotation> -l <scalarpath> -b <startdate>  -e <enddate> -t <stationid>  -p <pierlist> -z <azimuthlist> -y <abstypelist> -d <expectedD> -i <expectedI> -w <writepath> -f<identifier> -n <add2DB>  -g  <flag> -r <createarchive> -x <webdir> -u <user>')
         sys.exit(2)
     for opt, arg in opts:
         if opt == '-h':
@@ -135,6 +148,7 @@ def main(argv):
             print('                                 analyzed with the MagPy stream package.') 
             print('                -/srv/archive/"StationID"/DI/raw : ')
             print('                             archivefolder with successfully analyzed raw data') 
+            print('-f            : idetifier for BLV data (in database and filename) - default is BLV')
             print('-v            : variolist - comma separated list of variometer ids')
             print('-j            : variodataidlist - specify the dataids to be used fro each vario')
             print('                Default: 0002 for each variometer sensor')
@@ -191,6 +205,8 @@ def main(argv):
             dipath = arg
         elif opt in ("-w", "--archive"):
             archive=arg
+        elif opt in ("-f", "--identifier"):
+            identifier=arg
         elif opt in ("-v", "--variolist"):
             variolist = arg.split(',')
         elif opt in ("-j", "--variodataidlist"):
@@ -523,23 +539,23 @@ def main(argv):
 
                 if createarchive and variolist.index(vario) == len(variolist)-1  and scalarlist.index(scalar) == len(scalarlist)-1:
                     print("adding to archive")
-                    absstream = absoluteAnalysis(abspath,variopath,scalarpath,expD=expD,expI=expI, diid=diid,stationid=stationid,abstype=abstype,azimuth=azimuth,pier=pier, alpha=alpha,deltaF=deltaF, starttime=begin,endtime=end, db=db,dbadd=dbadd,compensation=compensation,magrotation=rotation,movetoarchive=os.path.join(archive,stationid,'DI','raw'))
+                    absstream = absoluteAnalysis(abspath,variopath,scalarpath,expD=expD,expI=expI, diid=diid,stationid=stationid,abstype=abstype,azimuth=azimuth,pier=pier, alpha=alpha,deltaF=deltaF, starttime=begin,endtime=end, db=db,dbadd=dbadd,compensation=compensation,magrotation=rotation,movetoarchive=os.path.join(archive,stationid,'DI','raw'),deltaD=0.0000000001,deltaI=0.0000000001)
                 else:
                     print("just analyzing")
-                    absstream = absoluteAnalysis(abspath,variopath,scalarpath,expD=expD,expI=expI, diid=diid,stationid=stationid,abstype=abstype,azimuth=azimuth,pier=pier, alpha=alpha,deltaF=deltaF, starttime=begin,endtime=end, db=db,dbadd=dbadd,compensation=compensation)
+                    absstream = absoluteAnalysis(abspath,variopath,scalarpath,expD=expD,expI=expI, diid=diid,stationid=stationid,abstype=abstype,azimuth=azimuth,pier=pier, alpha=alpha,deltaF=deltaF, starttime=begin,endtime=end, db=db,dbadd=dbadd,compensation=compensation,deltaD=0.0000000001,deltaI=0.0000000001)
 
 		# -----------------------------------------------------
     		# d) write data to a file and sort it, write it again 
                 #          (workaround to get sorting correctly)
     		# -----------------------------------------------------
-                if absstream:
+                if absstream and absstream.length()[0] > 0:
                     print("Writing data", absstream.length())
-                    absstream.write(os.path.join(archive,stationid,'DI','data'),coverage='all', mode='replace',filenamebegins='BLV_'+vario+'_'+scalar+'_'+pier)
+                    absstream.write(os.path.join(archive,stationid,'DI','data'),coverage='all', mode='replace',filenamebegins=identifier+'_'+vario+'_'+scalar+'_'+pier)
                     try:
                         # Reload all data, delete old file and write again to get correct ordering
-                        newabsstream = read(os.path.join(archive,stationid,'DI','data','BLV_'+vario+'_'+scalar+'_'+pier+'*'))
-                        os.remove(os.path.join(archive,stationid,'DI','data','BLV_'+vario+'_'+scalar+'_'+pier+'.txt'))# delete file from hd
-                        newabsstream.write(os.path.join(archive,stationid,'DI','data'),coverage='all',mode='replace',filenamebegins='BLV_'+vario+'_'+scalar+'_'+pier)
+                        newabsstream = read(os.path.join(archive,stationid,'DI','data',identifier+'_'+vario+'_'+scalar+'_'+pier+'*'))
+                        os.remove(os.path.join(archive,stationid,'DI','data',identifier+'_'+vario+'_'+scalar+'_'+pier+'.txt'))# delete file from hd
+                        newabsstream.write(os.path.join(archive,stationid,'DI','data'),coverage='all',mode='replace',filenamebegins=identifier+'_'+vario+'_'+scalar+'_'+pier)
                     except:
                         print (" Stream apparently not existing...")
                     print("Stream written - checking for DB")
@@ -547,34 +563,34 @@ def main(argv):
                         # SensorID necessary....
                         print("Now adding data to the data bank")
                         #newabsstream.header["SensorID"] = vario
-                        writeDB(db,absstream,tablename='BLV_'+vario+'_'+scalar+'_'+pier)
-                        #stream2db(db,newabsstream,mode='force',tablename='BLV_'+vario+'_'+scalar+'_'+pier) 
+                        writeDB(db,absstream,tablename=identifier+'_'+vario+'_'+scalar+'_'+pier)
+                        #stream2db(db,newabsstream,mode='force',tablename=identifier+'_'+vario+'_'+scalar+'_'+pier) 
 
         	    # -----------------------------------------------------
         	    # f) get flags and apply them to data
         	    # -----------------------------------------------------
                     if db and flagging:
-                        newabsstream = readDB(db,'BLV_'+vario+'_'+scalar+'_'+pier)
-       	                flaglist = db2flaglist(db,'BLV_'+vario+'_'+scalar+'_'+pier)
+                        newabsstream = readDB(db,identifier+'_'+vario+'_'+scalar+'_'+pier)
+       	                flaglist = db2flaglist(db,identifier+'_'+vario+'_'+scalar+'_'+pier)
                     else:
-                        newabsstream = readDB(db,'BLV_'+vario+'_'+scalar+'_'+pier)
+                        newabsstream = readDB(db,identifier+'_'+vario+'_'+scalar+'_'+pier)
                         flaglist = []
         	    if len(flaglist) > 0:
                         flabsstream = newabsstream.flag(flaglist)
         	        #for i in range(len(flaglist)):
         	        #    flabsstream = newabsstream.flag_stream(flaglist[i][2],flaglist[i][3],flaglist[i][4],flaglist[i][0],flaglist[i][1])
-                        flabsstream.write(os.path.join(archive,stationid,'DI','data'),coverage='all',filenamebegins='BLV_'+vario+'_'+scalar+'_'+pier)
+                        flabsstream.write(os.path.join(archive,stationid,'DI','data'),coverage='all',filenamebegins=identifier+'_'+vario+'_'+scalar+'_'+pier)
                         pltabsstream = flabsstream.remove_flagged()
 
         	    # -----------------------------------------------------
         	    # h) fit baseline and plot
         	    # -----------------------------------------------------
                     try:
-                        #pltabsstream = read(os.path.join(archive,stationid,'DI','data','BLV_'+vario+'_'+scalar+'_'+pier+'*'))
+                        #pltabsstream = read(os.path.join(archive,stationid,'DI','data',identifier+'_'+vario+'_'+scalar+'_'+pier+'*'))
                	        pltabsstream.trim(starttime=datetime.utcnow()-timedelta(days=380))
         	        # fit baseline using the parameters defined in db (if parameters not available then skip fitting)
         	        #absstream = absstream.fit(['dx','dy','dz'],poly,4)
-          	        savename = 'BLV_'+vario+'_'+scalar+'_'+pier+ '.png'
+          	        savename = identifier+'_'+vario+'_'+scalar+'_'+pier+ '.png'
                         #absstream = absstream.extract('f',98999,'<')
         	        mp.plot(pltabsstream,['dx','dy','dz'],symbollist=['o','o','o'],plottitle=vario+'_'+scalar+'_'+pier,outfile=os.path.join(archive,stationid,'DI','graphs',savename))
         	        #absstream.plot(['dx','dy','dz'],symbollist=['o','o','o'],plottitle=vario+'_'+scalar+'_'+pier,outfile=os.path.join(archive,stationid,'DI','graphs',savename))
